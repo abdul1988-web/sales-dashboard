@@ -7104,11 +7104,22 @@ function _dbRebuildPurchaseData(transactions){
     return m ? m[1] : '';
   }
 
-  /* ── Build CSV export URL (no API key needed) ── */
+  /* ── Build CSV export URLs ── */
+  /* URL list: tried in order until one succeeds */
+  /* allorigins & corsproxy are free CORS proxies — needed when file is opened locally */
+  function _csvUrls(sheetId, sheetTabName){
+    var direct1 = 'https://docs.google.com/spreadsheets/d/'+sheetId+'/export?format=csv'+(sheetTabName?'&sheet='+encodeURIComponent(sheetTabName):'');
+    var direct2 = 'https://docs.google.com/spreadsheets/d/'+sheetId+'/gviz/tq?tqx=out:csv'+(sheetTabName?'&sheet='+encodeURIComponent(sheetTabName):'');
+    var proxy1  = 'https://api.allorigins.win/raw?url='+encodeURIComponent(direct1);
+    var proxy2  = 'https://corsproxy.io/?'+encodeURIComponent(direct1);
+    return [direct1, direct2, proxy1, proxy2];
+  }
+  /* Keep old names as aliases for any other callers */
   function _csvUrl(sheetId, sheetTabName){
-    var base = 'https://docs.google.com/spreadsheets/d/'+sheetId+'/gviz/tq?tqx=out:csv';
-    if(sheetTabName) base += '&sheet='+encodeURIComponent(sheetTabName);
-    return base;
+    return 'https://docs.google.com/spreadsheets/d/'+sheetId+'/export?format=csv'+(sheetTabName?'&sheet='+encodeURIComponent(sheetTabName):'');
+  }
+  function _csvUrlFallback(sheetId, sheetTabName){
+    return 'https://docs.google.com/spreadsheets/d/'+sheetId+'/gviz/tq?tqx=out:csv'+(sheetTabName?'&sheet='+encodeURIComponent(sheetTabName):'');
   }
 
   /* ── Parse CSV text into array-of-arrays ── */
@@ -7244,43 +7255,66 @@ function _dbRebuildPurchaseData(transactions){
   }
 
   /* ── Core: fetch CSV from Google Sheets and process ── */
+  /* Tries primary URL first, then fallback URL on failure (CORS/network issues) */
   function _fetchAndProcess(sheetId, sheetTabName, silent){
     if(!sheetId) return;
+    var tabName = sheetTabName || 'Day Book';
     if(!silent){setStatus(true,'⏳ Google Sheet se data fetch ho raha hai…'); setProgress(20);}
-    var url = _csvUrl(sheetId, sheetTabName||'Day Book');
-    fetch(url, {cache:'no-store'})
-      .then(function(res){
-        if(!res.ok) throw new Error('Sheet fetch failed: '+res.status+' — Sheet public hai? Share > Anyone with link > Viewer');
-        return res.text();
-      })
-      .then(function(csvText){
-        if(!silent){setProgress(50);}
-        var rawRows = _parseCsv(csvText);
-        var parsed = _parseRawRows(rawRows);
-        if(!parsed) throw new Error('Header row nahi mili — Sheet mein Date + Vch Type column chahiye');
-        if(!silent){setProgress(75);}
-        var totalTxns = parsed.transactions.length;
-        if(totalTxns===0) throw new Error('Koi transaction nahi mila. Sheet ki rows check karein.');
-        buildDashboardDayBook(parsed.transactions, parsed.flatRows);
-        /* DayBook purchase data bhi rebuild karo */
-        try{ if(typeof _dbRebuildPurchaseData==='function') _dbRebuildPurchaseData(parsed.transactions); }catch(e){}
-        if(!silent){
-          setProgress(100);
-          var now=new Date();
-          var ts=now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
-          setStatus(true,'✅ Google Sheet loaded — '+totalTxns.toLocaleString('en-IN')+' txns · '+ts,'success');
-          document.getElementById('sheet-info').innerHTML=
-            '<div class="info-chip">🔗 <b>Google Sheet</b></div>'
-           +'<div class="info-chip">📊 Txns: <b>'+totalTxns.toLocaleString('en-IN')+'</b></div>'
-           +'<div class="info-chip">🕐 <b>'+ts+'</b></div>';
-          setTimeout(closeUpload,2000);
-        }
-        _gsSave();
-      })
-      .catch(function(err){
-        if(!silent) setStatus(true,'❌ '+err.message,'error');
-        console.warn('GS fetch error:',err);
-      });
+
+    function _processCSV(csvText){
+      if(!silent){setProgress(50);}
+      var rawRows = _parseCsv(csvText);
+      var parsed = _parseRawRows(rawRows);
+      if(!parsed) throw new Error('Header row nahi mili — Sheet mein Date + Vch Type column chahiye');
+      if(!silent){setProgress(75);}
+      var totalTxns = parsed.transactions.length;
+      if(totalTxns===0) throw new Error('Koi transaction nahi mila. Sheet ki rows check karein.');
+      buildDashboardDayBook(parsed.transactions, parsed.flatRows);
+      try{ if(typeof _dbRebuildPurchaseData==='function') _dbRebuildPurchaseData(parsed.transactions); }catch(e){}
+      if(!silent){
+        setProgress(100);
+        var now=new Date();
+        var ts=now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+        setStatus(true,'✅ Google Sheet loaded — '+totalTxns.toLocaleString('en-IN')+' txns · '+ts,'success');
+        document.getElementById('sheet-info').innerHTML=
+          '<div class="info-chip">🔗 <b>Google Sheet</b></div>'
+         +'<div class="info-chip">📊 Txns: <b>'+totalTxns.toLocaleString('en-IN')+'</b></div>'
+         +'<div class="info-chip">🕐 <b>'+ts+'</b></div>';
+        setTimeout(closeUpload,2000);
+      }
+      _gsSave();
+    }
+
+    /* Try each URL in sequence until one works */
+    var _urlList = _csvUrls(sheetId, tabName);
+    var _urlIdx  = 0;
+
+    function _tryNextUrl(){
+      if(_urlIdx >= _urlList.length){
+        if(!silent) setStatus(true,'❌ Failed to fetch — Sheet public karein: Share → Anyone with link → Viewer. Ya file kisi web server pe host karein (GitHub Pages / Netlify)','error');
+        return;
+      }
+      var url = _urlList[_urlIdx++];
+      console.log('GS trying URL #'+_urlIdx+': '+url);
+      fetch(url, {cache:'no-store'})
+        .then(function(res){
+          if(!res.ok) throw new Error('HTTP '+res.status);
+          return res.text();
+        })
+        .then(function(csv){
+          /* Reject HTML error pages */
+          var t = csv.trim().toLowerCase();
+          if(t.indexOf('<!doctype')===0||t.indexOf('<html')===0) throw new Error('html_response');
+          /* Reject too-short responses (likely error) */
+          if(csv.trim().length < 10) throw new Error('empty_response');
+          _processCSV(csv);
+        })
+        .catch(function(e){
+          console.warn('GS URL #'+_urlIdx+' failed: '+e.message+' — trying next…');
+          _tryNextUrl();
+        });
+    }
+    _tryNextUrl();
   }
 
   /* ── Auto-refresh timer ── */
