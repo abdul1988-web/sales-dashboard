@@ -3713,6 +3713,117 @@ header.header {
   .sp-head,.sp-row{grid-template-columns:1fr 56px 94px;padding:9px 12px;font-size:11px}
   .sp-body{padding:12px 12px 28px}
 }
+
+/* ── Password Gate Modal ── */
+#pw-gate-overlay{
+  position:fixed;inset:0;z-index:30000;
+  display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.72);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)
+}
+#pw-gate-overlay.open{display:flex}
+#pw-gate-box{
+  background:var(--card);
+  border:1px solid var(--box-border);
+  border-radius:18px;
+  padding:32px 28px 28px;
+  width:min(88vw,340px);
+  box-shadow:0 20px 60px rgba(0,0,0,.6),0 4px 16px rgba(0,0,0,.4);
+  position:relative;
+  animation:pwBoxIn .22s cubic-bezier(.34,1.4,.64,1) both
+}
+@keyframes pwBoxIn{from{opacity:0;transform:scale(.92) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
+#pw-gate-box::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  border-radius:18px 18px 0 0;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  opacity:.7
+}
+.pw-gate-icon{
+  font-size:38px;text-align:center;display:block;margin-bottom:10px;
+  filter:drop-shadow(0 2px 8px rgba(240,165,0,.4))
+}
+.pw-gate-title{
+  font-size:17px;font-weight:800;color:var(--text);
+  text-align:center;letter-spacing:.3px;margin-bottom:4px
+}
+.pw-gate-sub{
+  font-size:11px;color:var(--muted);text-align:center;
+  margin-bottom:22px;letter-spacing:.2px
+}
+.pw-gate-inp-wrap{
+  position:relative;margin-bottom:10px
+}
+#pw-gate-input{
+  width:100%;background:var(--surface);
+  border:1.5px solid var(--border);border-radius:10px;
+  padding:11px 42px 11px 14px;
+  color:var(--text);font-family:'DM Mono',monospace;
+  font-size:15px;letter-spacing:2px;
+  outline:none;transition:border-color .2s,box-shadow .2s
+}
+#pw-gate-input:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(240,165,0,.12)
+}
+#pw-gate-input.pw-error{
+  border-color:var(--red)!important;
+  box-shadow:0 0 0 3px rgba(231,76,60,.14)!important;
+  animation:pwShake .32s ease
+}
+@keyframes pwShake{
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-6px)}
+  40%{transform:translateX(6px)}
+  60%{transform:translateX(-4px)}
+  80%{transform:translateX(4px)}
+}
+.pw-eye-btn{
+  position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:var(--muted);
+  cursor:pointer;font-size:16px;padding:2px 4px;
+  transition:color .15s;line-height:1
+}
+.pw-eye-btn:hover{color:var(--accent)}
+.pw-gate-error{
+  font-size:11px;color:var(--red);
+  min-height:16px;margin-bottom:14px;
+  text-align:center;letter-spacing:.2px;
+  transition:opacity .2s;opacity:0
+}
+.pw-gate-error.vis{opacity:1}
+#pw-gate-submit{
+  width:100%;padding:12px;
+  background:linear-gradient(135deg,var(--accent),#c87c00);
+  border:none;border-radius:10px;
+  color:#000;font-size:13px;font-weight:800;
+  font-family:'DM Sans',sans-serif;letter-spacing:.5px;
+  text-transform:uppercase;cursor:pointer;
+  transition:opacity .2s,transform .1s;
+  box-shadow:0 4px 16px rgba(240,165,0,.28)
+}
+#pw-gate-submit:hover{opacity:.92;transform:translateY(-1px)}
+#pw-gate-submit:active{transform:translateY(0)}
+.pw-gate-cancel{
+  display:block;text-align:center;margin-top:12px;
+  font-size:11px;color:var(--muted);cursor:pointer;
+  transition:color .15s;letter-spacing:.2px
+}
+.pw-gate-cancel:hover{color:var(--text)}
+/* Light theme overrides */
+body.theme-light #pw-gate-box{
+  background:var(--card)!important;
+  box-shadow:0 16px 48px rgba(100,80,40,.18),0 4px 16px rgba(0,0,0,.10)!important
+}
+body.theme-light #pw-gate-input{
+  background:var(--surface)!important;
+  border-color:var(--border)!important;
+  color:var(--text)!important
+}
+body.theme-light #pw-gate-input:focus{
+  border-color:var(--accent)!important;
+  box-shadow:0 0 0 3px rgba(184,115,10,.12)!important
+}
 </style>
 <!-- PWA Meta Tags -->
 <meta name="theme-color" content="#f0a500">
@@ -5557,6 +5668,139 @@ renderItemDetail = function(t){
     </div>
   </div>
 </div>
+<!-- ══════════════════ Password Gate Modal ══════════════════════ -->
+<div id="pw-gate-overlay">
+  <div id="pw-gate-box">
+    <span class="pw-gate-icon">🔒</span>
+    <div class="pw-gate-title">Password Required</div>
+    <div class="pw-gate-sub">Excel upload ke liye password darj karein</div>
+    <div class="pw-gate-inp-wrap">
+      <input type="password" id="pw-gate-input" placeholder="Password..." autocomplete="off"
+             onkeydown="if(event.key==='Enter')_pwGateSubmit()" oninput="_pwGateClearError()">
+      <button class="pw-eye-btn" id="pw-eye-btn" onclick="_pwToggleEye()" title="Show/Hide">👁</button>
+    </div>
+    <div class="pw-gate-error" id="pw-gate-error">❌ Password galat hai</div>
+    <button id="pw-gate-submit" onclick="_pwGateSubmit()">✓ Confirm</button>
+    <span class="pw-gate-cancel" onclick="_pwGateClose()">Cancel</span>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   PASSWORD GATE — Excel Upload ke liye password protection
+   Ek hi jagah change karo: _PW_GATE_CONFIG.password
+   ══════════════════════════════════════════════════════════════ */
+(function(){
+
+  /* ── Config: sirf yahan password change karo ── */
+  var _PW_GATE_CONFIG = {
+    password: '1234'   /* <-- yahan apna password set karo */
+  };
+
+  /* ── State ── */
+  var _pwPendingAction = null; /* function to call after successful auth */
+
+  /* ── Open gate: action = function to call on success ── */
+  window._pwGateOpen = function(action){
+    _pwPendingAction = (typeof action === 'function') ? action : null;
+    var overlay = document.getElementById('pw-gate-overlay');
+    var inp     = document.getElementById('pw-gate-input');
+    var err     = document.getElementById('pw-gate-error');
+    if(!overlay) return;
+    /* Reset state */
+    if(inp){ inp.value=''; inp.type='password'; }
+    if(err){ err.classList.remove('vis'); }
+    var eyeBtn = document.getElementById('pw-eye-btn');
+    if(eyeBtn) eyeBtn.textContent = '👁';
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function(){ if(inp) inp.focus(); }, 120);
+  };
+
+  /* ── Close gate without action ── */
+  window._pwGateClose = function(){
+    var overlay = document.getElementById('pw-gate-overlay');
+    if(overlay) overlay.classList.remove('open');
+    document.body.style.overflow = '';
+    _pwPendingAction = null;
+  };
+
+  /* ── Submit handler ── */
+  window._pwGateSubmit = function(){
+    var inp = document.getElementById('pw-gate-input');
+    var err = document.getElementById('pw-gate-error');
+    if(!inp) return;
+    var entered = inp.value;
+    if(entered === _PW_GATE_CONFIG.password){
+      /* Correct — action pehle save karo, phir close karo */
+      var actionToRun = _pwPendingAction;
+      window._pwGateClose();
+      if(typeof actionToRun === 'function'){
+        setTimeout(actionToRun, 80);
+      }
+    } else {
+      /* Wrong password */
+      if(inp){ inp.classList.add('pw-error'); setTimeout(function(){ inp.classList.remove('pw-error'); },350); inp.value=''; inp.focus(); }
+      if(err){ err.classList.add('vis'); }
+    }
+  };
+
+  /* ── Clear error on input ── */
+  window._pwGateClearError = function(){
+    var err = document.getElementById('pw-gate-error');
+    if(err) err.classList.remove('vis');
+  };
+
+  /* ── Toggle password visibility ── */
+  window._pwToggleEye = function(){
+    var inp    = document.getElementById('pw-gate-input');
+    var eyeBtn = document.getElementById('pw-eye-btn');
+    if(!inp) return;
+    var isHidden = inp.type === 'password';
+    inp.type = isHidden ? 'text' : 'password';
+    if(eyeBtn) eyeBtn.textContent = isHidden ? '🙈' : '👁';
+    inp.focus();
+  };
+
+  /* ── Close on overlay backdrop click ── */
+  document.getElementById('pw-gate-overlay').addEventListener('click', function(e){
+    if(e.target === this) window._pwGateClose();
+  });
+
+  /* ── ESC to close ── */
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape'){
+      var overlay = document.getElementById('pw-gate-overlay');
+      if(overlay && overlay.classList.contains('open')) window._pwGateClose();
+    }
+  });
+
+  /* ══════════════════════════════════════════════════════════════
+     INTERCEPT: openUpload ko override karo taaki password pehle aaye
+     Existing openUpload function ko touch nahi kiya — sirf wrap kiya
+     ══════════════════════════════════════════════════════════════ */
+  /* ── openUpload wrap: saari scripts load hone ke BAAD apply karo ── */
+  /* window.load pe karo taaki history intercept bhi pehle apna wrap kar le */
+  window.addEventListener('load', function(){
+    var _orig = window.openUpload;
+    if(typeof _orig !== 'function' || _orig._pwWrapped) return;
+    var _wrapped = function(){
+      window._pwGateOpen(function(){
+        /* Password sahi hua — seedha modal open karo, chain ke issues avoid karo */
+        var modal = document.getElementById('upload-modal');
+        if(modal) modal.classList.add('open');
+        if(window._fabSync) window._fabSync();
+        /* History entry bhi push karo taaki back button kaam kare */
+        try{ history.pushState({overlay:'upload'},''); }catch(e){}
+      });
+    };
+    _wrapped._pwWrapped = true;
+    window.openUpload = _wrapped;
+  });
+
+})();
+</script>
+
 <script>
 // ── FAB visibility sync ──────────────────────────────────────
 // Checks all overlays and hides/shows the FAB accordingly.
@@ -5568,11 +5812,13 @@ function _fabSync(){
   var dmenu=document.getElementById('dmenu-overlay');
   var uploadModal=document.getElementById('upload-modal');
   var themeScreen=document.getElementById('theme-screen');
+  var pwGate=document.getElementById('pw-gate-overlay');
   var anyOpen=
     (sidebar&&sidebar.classList.contains('open'))||
     (dmenu&&dmenu.classList.contains('open'))||
     (uploadModal&&uploadModal.classList.contains('open'))||
-    (themeScreen&&themeScreen.style.display!=='none'&&themeScreen.style.display!=='');
+    (themeScreen&&themeScreen.style.display!=='none'&&themeScreen.style.display!=='')||
+    (pwGate&&pwGate.classList.contains('open'));
   fab.style.display=anyOpen?'none':'flex';
 }
 
